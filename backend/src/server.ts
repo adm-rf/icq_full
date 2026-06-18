@@ -1,3 +1,7 @@
+// Загрузка переменных окружения из .env
+import * as dotenv from 'dotenv';
+dotenv.config();
+
 import { config } from './config/env';
 import logger from './utils/logger';
 import { initializeApp } from './app';

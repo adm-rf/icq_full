@@ -1,41 +1,38 @@
 {
   "expo": {
-    "name": "Messenger",
-    "slug": "messenger",
+    "name": "ICQ Messenger",
+    "slug": "icq-messenger",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#2563eb"
+      "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "updates": {
+      "fallbackToCacheTimeout": 0,
+      "enabled": false
+    },
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.messenger.app"
+      "bundleIdentifier": "com.icq.messenger"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#2563eb"
+        "backgroundColor": "#ffffff"
       },
-      "package": "com.messenger.app"
+      "package": "com.icq.messenger",
+      "permissions": ["INTERNET"]
     },
     "web": {
-      "favicon": "./assets/favicon.png",
-      "bundler": "metro"
+      "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "expo-router"
-    ],
-    "scheme": "messenger",
     "extra": {
-      "apiUrl": "http://localhost:3000",
-      "socketUrl": "http://localhost:3000"
+      "apiUrl": "http://185.123.195.44:3000/api"
     }
   }
 }

@@ -1,4 +1,4 @@
-import { Socket, NextFunction } from 'socket.io';
+import { Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { config } from '../../config/env';
 import { UnauthorizedError } from '../../utils/errorHandler';
@@ -32,7 +32,7 @@ interface JWTPayload {
  */
 export function wsAuthMiddleware(
   socket: AuthSocket,
-  next: NextFunction
+  next: (err?: Error) => void
 ): void {
   try {
     const token = socket.handshake.auth.token || socket.handshake.query.token;

@@ -1,6 +1,6 @@
 import { Model, DataTypes, Optional } from 'sequelize';
 import sequelize from '../config/database';
-import User from './User';
+import _User from './User';
 
 /**
  * Атрибуты чата/конверсации

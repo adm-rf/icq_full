@@ -1,9 +1,6 @@
 import { Model, DataTypes, Optional } from 'sequelize';
 import sequelize from '../config/database';
 
-/**
- * Атрибуты пользователя для создания
- */
 export interface UserAttributes {
   id?: number;
   email: string;
@@ -16,29 +13,19 @@ export interface UserAttributes {
   updatedAt?: Date;
 }
 
-/**
- * Атрибуты пользователя для обновления (все поля опциональны)
- */
 export interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'createdAt' | 'updatedAt'> {}
 
-/**
- * Модель пользователя
- */
+// Убрали public class fields - они конфликтовали с Sequelize
 class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
-  public id!: number;
-  public email!: string;
-  public username!: string;
-  public passwordHash!: string;
-  public avatarUrl!: string | null;
-  public status!: string;
-  public lastSeenAt!: Date | null;
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
-
-  // Методы экземпляра (будут добавлены позже)
-  // TODO: Добавить метод для проверки пароля
-  // TODO: Добавить метод для генерации JWT токена
-  // TODO: Добавить метод для обновления lastSeenAt
+  declare id: number;
+  declare email: string;
+  declare username: string;
+  declare passwordHash: string;
+  declare avatarUrl: string | null;
+  declare status: string;
+  declare lastSeenAt: Date | null;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 }
 
 User.init(
@@ -52,20 +39,18 @@ User.init(
       type: DataTypes.STRING,
       allowNull: false,
       unique: true,
-      validate: {
-        isEmail: true,
-      },
+      validate: { isEmail: true },
     },
     username: {
       type: DataTypes.STRING,
       allowNull: false,
       unique: true,
-      minLength: 3,
-      maxLength: 50,
+      validate: { len: [3, 50] },
     },
     passwordHash: {
       type: DataTypes.STRING,
       allowNull: false,
+      field: 'password_hash',
     },
     avatarUrl: {
       type: DataTypes.STRING,
@@ -76,7 +61,6 @@ User.init(
       type: DataTypes.STRING,
       allowNull: false,
       defaultValue: 'offline',
-      // TODO: Добавить enum: 'online', 'offline', 'away', 'busy'
     },
     lastSeenAt: {
       type: DataTypes.DATE,

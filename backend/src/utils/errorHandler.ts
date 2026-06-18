@@ -67,7 +67,7 @@ export function errorHandler(
   err: Error | AppError,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): void {
   // Логирование ошибки
   logger.error(`❌ ${req.method} ${req.path}`, {

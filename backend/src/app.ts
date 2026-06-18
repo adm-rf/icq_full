@@ -50,7 +50,7 @@ export function createApp(): express.Application {
   app.use(cookieParser());
 
   // Health check endpoint
-  app.get('/health', (req, res) => {
+  app.get('/health', (_req, res) => {
     res.status(200).json({
       success: true,
       status: 'ok',
@@ -83,7 +83,7 @@ export function createApp(): express.Application {
 /**
  * Инициализация приложения
  */
-export async function initializeApp(): Promise<{ app: express.Application; io: any }> {
+export async function initializeApp(): Promise<{ app: express.Application; io: any; httpServer: any }> {
   logger.info('🚀 Starting application initialization...');
 
   // Тест подключения к БД
