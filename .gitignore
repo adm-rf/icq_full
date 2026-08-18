@@ -2,62 +2,11 @@
 # Dependencies
 node_modules/
 
-# Environment variables
+# Editors
+.vscode/
+
+# Environment
 .env
 .env.local
-.env.*
-
-# Build outputs
-dist/
-build/
-target/
-
-# TypeScript/JavaScript
-*.tsbuildinfo
-*.js.map
-*.d.ts
-
-# Logs
-*.log
-
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Test coverage
-coverage/
-.nyc_output
-.jest/
-
-# Temporary files
-*.tmp
-*.temp
-```mobile_broken_*/
-
-# Backup files
-*.backup
-*.bak
-
-# Broken/mobile temp folders
-mobile_broken_*/
-
-# Expo cache
-.expo/
-web-build/
-
-# Node modules
-node_modules/
-
-# Logs
-*.log
-npm-debug.log*
-
-# OS files
-.DS_Store
-Thumbs.db
+*.env.*
+```

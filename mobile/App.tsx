@@ -42,32 +42,74 @@ export default function App() {
     }
   }, []);
 
-  // Подключаем WebSocket
+  // Подключаем WebSocket с улучшенными настройками стабильности
   useEffect(() => {
     if (user) {
       console.log('🔌 Попытка подключения WebSocket...');
       setWsStatus('Подключение...');
       
       const newSocket = io(API_URL, {
-  transports: ['websocket', 'polling'],
-  reconnection: true,
-  reconnectionAttempts: 10,
-  reconnectionDelay: 1000,
-  reconnectionDelayMax: 5000,
-  timeout: 20000,
-  forceNew: false,
-  autoConnect: true
-});
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 10000,
+        randomizationFactor: 0.5,
+        timeout: 30000,
+        forceNew: false,
+        autoConnect: true
+      });
+      
+      // Heartbeat проверка - если нет активности 30с, форсим reconnect
+      let lastMessageTime = Date.now();
+      let heartbeatInterval: NodeJS.Timeout | null = null;
+      
+      const startHeartbeatCheck = () => {
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        heartbeatInterval = setInterval(() => {
+          const timeSinceLastMessage = Date.now() - lastMessageTime;
+          if (timeSinceLastMessage > 30000 && newSocket.connected) {
+            console.warn('⚠️ Heartbeat timeout - нет сообщений 30с, форсируем reconnect');
+            newSocket.disconnect();
+            newSocket.connect();
+          }
+        }, 10000);
+      };
       
       newSocket.on('connect', () => {
         console.log('✅ WebSocket подключен:', newSocket.id);
         setWsStatus('Online');
+        lastMessageTime = Date.now();
         newSocket.emit('register', user.id);
         console.log(`📤 Зарегистрирован в комнате user_${user.id}`);
+        startHeartbeatCheck();
+      });
+      
+      newSocket.on('reconnect_attempt', (attemptNumber: number) => {
+        console.log(`🔄 Попытка переподключения #${attemptNumber}...`);
+        setWsStatus(`Переподключение (${attemptNumber})...`);
+      });
+      
+      newSocket.on('reconnect', (attemptNumber: number) => {
+        console.log(`✅ Успешная переподключение после ${attemptNumber} попыток`);
+        setWsStatus('Online');
+        newSocket.emit('register', user.id);
+        lastMessageTime = Date.now();
+        startHeartbeatCheck();
+      });
+      
+      newSocket.on('reconnect_error', (error) => {
+        console.error('❌ Ошибка переподключения:', error.message);
+      });
+      
+      newSocket.on('reconnect_failed', () => {
+        console.error('❌ Все попытки переподключения исчерпаны');
+        setWsStatus('Offline - повторите позже');
       });
       
       newSocket.on('newMessage', (data) => {
         console.log('📨 ПОЛУЧЕНО НОВОЕ СООБЩЕНИЕ:', data);
+        lastMessageTime = Date.now();
         
         if (activeChat && data.chatId === activeChat.id) {
           setMessages(prev => {
@@ -82,32 +124,50 @@ export default function App() {
       });
       
       newSocket.on('newChat', (chat) => {
-        console.log(' Получен новый чат:', chat);
+        console.log('📬 Получен новый чат:', chat);
+        lastMessageTime = Date.now();
         loadConversations();
       });
       
       newSocket.on('chatDeleted', (data) => {
         console.log('🗑️ Чат удален:', data);
+        lastMessageTime = Date.now();
         if (activeChat && activeChat.id === data.chatId) {
           closeChat();
         }
         loadConversations();
       });
       
+      // Обработка событий онлайн/оффлайн других пользователей
+      newSocket.on('userOnline', (data) => {
+        console.log(`🟢 Пользователь ${data.userId} онлайн`);
+        // Можно обновить состояние списка пользователей
+        loadUsers();
+      });
+      
+      newSocket.on('userOffline', (data) => {
+        console.log(`🔴 Пользователь ${data.userId} оффлайн`);
+        // Можно обновить состояние списка пользователей
+        loadUsers();
+      });
+      
       newSocket.on('disconnect', (reason) => {
         console.log('❌ WebSocket отключен:', reason);
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
         setWsStatus('Offline');
       });
       
       newSocket.on('connect_error', (error) => {
         console.error('❌ Ошибка подключения WebSocket:', error.message);
-        setWsStatus('Ошибка');
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        setWsStatus('Ошибка подключения');
       });
       
       setSocket(newSocket);
       
       return () => {
-        console.log(' Отключение WebSocket...');
+        console.log('🔌 Отключение WebSocket...');
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
         newSocket.disconnect();
       };
     }

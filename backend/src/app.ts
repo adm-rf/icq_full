@@ -86,13 +86,19 @@ export async function initializeApp(): Promise<AppComponents> {
     throw error;
   }
 
-  // Socket.IO setup
+  // Socket.IO setup с улучшенными настройками стабильности
   const io = new SocketIOServer(httpServer, {
     cors: {
       origin: '*',
       methods: ['GET', 'POST']
-    }
+    },
+    pingInterval: 25000,
+    pingTimeout: 20000,
+    connectTimeout: 30000
   });
+
+  // Map для отслеживания онлайн-пользователей: userId -> socketId[]
+  const onlineUsers = new Map<number, string[]>();
 
   // Передаем io в роуты conversations
   setSocketIO(io);
@@ -103,7 +109,17 @@ export async function initializeApp(): Promise<AppComponents> {
     
     socket.on('register', (userId: number) => {
       socket.join(`user_${userId}`);
+      
+      // Добавляем сокет в список пользователя
+      const userSockets = onlineUsers.get(userId) || [];
+      userSockets.push(socket.id);
+      onlineUsers.set(userId, userSockets);
+      
       logger.info(`👤 User ${userId} registered on socket ${socket.id}`);
+      logger.info(`📊 Online users: ${Array.from(onlineUsers.entries()).map(([id, sockets]) => `${id}:${sockets.length}`).join(', ')}`);
+      
+      // Уведомляем всех о том, что пользователь онлайн
+      socket.broadcast.emit('userOnline', { userId });
     });
     
     socket.on('joinChat', (chatId: number) => {
@@ -111,8 +127,32 @@ export async function initializeApp(): Promise<AppComponents> {
       logger.info(`💬 Socket ${socket.id} joined chat ${chatId}`);
     });
     
-    socket.on('disconnect', () => {
-      logger.info(`❌ WebSocket disconnected: ${socket.id}`);
+    socket.on('disconnect', (reason) => {
+      logger.info(`❌ WebSocket disconnected: ${socket.id}, reason: ${reason}`);
+      
+      // Находим пользователя по socket.id и удаляем сокет из списка
+      let disconnectedUserId: number | null = null;
+      for (const [userId, sockets] of onlineUsers.entries()) {
+        const index = sockets.indexOf(socket.id);
+        if (index !== -1) {
+          sockets.splice(index, 1);
+          if (sockets.length === 0) {
+            onlineUsers.delete(userId);
+            disconnectedUserId = userId;
+          } else {
+            onlineUsers.set(userId, sockets);
+          }
+          break;
+        }
+      }
+      
+      // Если у пользователя больше нет сокетов - уведомляем об offline
+      if (disconnectedUserId !== null) {
+        logger.info(`🔴 User ${disconnectedUserId} went offline`);
+        socket.broadcast.emit('userOffline', { userId: disconnectedUserId });
+      }
+      
+      logger.info(`📊 Online users after disconnect: ${Array.from(onlineUsers.entries()).map(([id, sockets]) => `${id}:${sockets.length}`).join(', ')}`);
     });
   });
 
