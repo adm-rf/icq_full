@@ -39,3 +39,25 @@ coverage/
 *.tmp
 *.temp
 ```mobile_broken_*/
+
+# Backup files
+*.backup
+*.bak
+
+# Broken/mobile temp folders
+mobile_broken_*/
+
+# Expo cache
+.expo/
+web-build/
+
+# Node modules
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
