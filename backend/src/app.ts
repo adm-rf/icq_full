@@ -15,6 +15,8 @@ import Message from './models/Message';
 import authRoutes from './routes/auth';
 import conversationsRoutes, { setSocketIO } from './routes/conversations';
 import usersRoutes from './routes/users';
+import profileRoutes from './routes/profile';
+import path from 'path';
 
 export interface AppComponents {
   app: Express;
@@ -39,6 +41,8 @@ export async function initializeApp(): Promise<AppComponents> {
   // Body parser
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+// Статические файлы (аватары)
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
   // Health check
   app.get('/api/health', (req, res) => {
@@ -58,6 +62,8 @@ export async function initializeApp(): Promise<AppComponents> {
 
   app.use('/api/users', usersRoutes);
   logger.info('✅ Users routes loaded');
+app.use('/api/profile', profileRoutes);
+logger.info('✅ Profile routes loaded');
 
   // 404 handler
   app.use((req, res) => {
