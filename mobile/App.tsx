@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, FlatList, Modal } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, FlatList, Modal, Image } from 'react-native';
 import { io, Socket } from 'socket.io-client';
 
 const API_URL = 'http://185.123.195.44:3000';
@@ -30,6 +30,11 @@ export default function App() {
   
   // Polling interval для fallback
   const pollingIntervalRef = useRef<any>(null);
+
+  const [showProfile, setShowProfile] = useState(false);
+  const [profileName, setProfileName] = useState('');
+  const [profileStatus, setProfileStatus] = useState('');
+  const [profileAvatar, setProfileAvatar] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem('authToken');
@@ -358,6 +363,72 @@ export default function App() {
     setStatus('Вы вышли из системы');
   };
 
+  const openProfile = async () => {
+    setShowProfile(true);
+    setProfileName(user?.username || '');
+    setProfileStatus(user?.status || '');
+    setProfileAvatar(user?.avatarUrl || null);
+    try {
+      const r = await fetch(API_URL + '/api/profile', { headers: getAuthHeaders() });
+      const d = await r.json();
+      if (d.success) {
+        setProfileName(d.data.username || '');
+        setProfileStatus(d.data.status || '');
+        setProfileAvatar(d.data.avatarUrl || null);
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const saveProfile = async () => {
+    try {
+      const r = await fetch(API_URL + '/api/profile', {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ username: profileName, status: profileStatus })
+      });
+      const d = await r.json();
+      if (d.success) {
+        const newData = { ...user, username: d.data.username, status: d.data.status, avatarUrl: d.data.avatarUrl };
+        setUser(newData);
+        localStorage.setItem('userData', JSON.stringify(newData));
+        Alert.alert('✅ Успех', 'Профиль сохранён');
+        setShowProfile(false);
+      } else {
+        Alert.alert('❌ Ошибка', d.message || 'Не удалось сохранить');
+      }
+    } catch (e) { Alert.alert('❌ Ошибка', e.message); }
+  };
+
+  const pickAvatar = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (ev) => {
+      const file = ev.target.files[0];
+      if (!file) return;
+      const fd = new FormData();
+      fd.append('avatar', file);
+      try {
+        const r = await fetch(API_URL + '/api/profile/avatar', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + localStorage.getItem('authToken') },
+          body: fd
+        });
+        const d = await r.json();
+        if (d.success) {
+          setProfileAvatar(d.data.avatarUrl);
+          const newData = { ...user, avatarUrl: d.data.avatarUrl };
+          setUser(newData);
+          localStorage.setItem('userData', JSON.stringify(newData));
+          Alert.alert('✅ Успех', 'Аватар загружен');
+        } else {
+          Alert.alert('❌ Ошибка', d.message || 'Не удалось загрузить');
+        }
+      } catch (e) { Alert.alert('❌ Ошибка', e.message); }
+    };
+    input.click();
+  };
+
   const toggleUserSelection = (userId: number) => {
     setSelectedUsers(prev => 
       prev.includes(userId) 
@@ -569,10 +640,44 @@ export default function App() {
               {wsStatus === 'Online' ? ' Online' : '🔴 ' + wsStatus}
             </Text>
           </View>
+          <TouchableOpacity onPress={openProfile} style={styles.logoutButton}>
+            <Text style={styles.logoutText}>👤 Профиль</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
             <Text style={styles.logoutText}>Выйти</Text>
           </TouchableOpacity>
         </View>
+
+        <Modal transparent={true} visible={showProfile} animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>👤 Профиль</Text>
+              <View style={styles.avatarPreview}>
+                {profileAvatar ? (
+                  <Image source={{ uri: API_URL + '/' + profileAvatar }} style={styles.avatarImage} />
+                ) : (
+                  <View style={[styles.avatarCircle, { backgroundColor: getUserColor(user?.id || 1) }]}>
+                    <Text style={styles.avatarLetter}>{(user?.username || 'U')[0].toUpperCase()}</Text>
+                  </View>
+                )}
+              </View>
+              <TouchableOpacity onPress={pickAvatar} style={styles.profileButton}>
+                <Text style={styles.profileButtonText}>📷 Сменить аватар</Text>
+              </TouchableOpacity>
+              <TextInput style={styles.profileInput} value={profileName} onChangeText={setProfileName} placeholder="Имя пользователя" />
+              <TextInput style={styles.profileInput} value={profileStatus} onChangeText={setProfileStatus} placeholder="Статус" />
+              <Text style={styles.profileEmail}>{user?.email}</Text>
+              <View style={styles.profileActions}>
+                <TouchableOpacity onPress={saveProfile} style={styles.profileButton}>
+                  <Text style={styles.profileButtonText}>💾 Сохранить</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowProfile(false)} style={styles.cancelButton}>
+                  <Text style={styles.cancelButtonText}>Отмена</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         {conversations.length === 0 ? (
           <View style={styles.center}>
@@ -729,6 +834,21 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
+  modalContent: { backgroundColor: '#fff', borderRadius: 16, padding: 20, width: '90%', maxWidth: 400 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+  avatarPreview: { alignItems: 'center', marginBottom: 15 },
+  avatarImage: { width: 80, height: 80, borderRadius: 40 },
+  avatarCircle: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center' },
+  avatarLetter: { color: '#fff', fontSize: 32, fontWeight: 'bold' },
+  profileButton: { backgroundColor: '#2563eb', borderRadius: 8, padding: 10, alignItems: 'center', marginBottom: 10 },
+  profileButtonText: { color: '#fff', fontWeight: 'bold' },
+  profileInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 10 },
+  profileEmail: { color: '#888', textAlign: 'center', marginBottom: 10 },
+  profileActions: { flexDirection: 'row', gap: 10 },
+  cancelButton: { flex: 1, backgroundColor: '#eee', borderRadius: 8, padding: 10, alignItems: 'center' },
+  cancelButtonText: { color: '#333', fontWeight: 'bold' },
+
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   content: { maxWidth: 500, margin: 'auto', padding: 20, paddingTop: 60, backgroundColor: '#fff', minHeight: '100%' },
   title: { fontSize: 32, fontWeight: 'bold', textAlign: 'center', marginBottom: 10, color: '#000' },
