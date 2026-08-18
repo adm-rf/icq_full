@@ -1,67 +1,62 @@
-import express from 'express';
+import express, { Express } from 'express';
 import cors from 'cors';
-import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
-import cookieParser from 'cookie-parser';
-import { config } from './config/env';
+import http from 'http';
+import { Server as SocketIOServer } from 'socket.io';
+import sequelize from './config/database';
 import logger from './utils/logger';
 import { errorHandler } from './utils/errorHandler';
-import { setupAssociations } from './models';
-import { testConnection } from './config/database';
-import { configureSocketIO } from './config/socket';
+
+// Импорт моделей
+import User from './models/User';
+import Conversation from './models/Conversation';
 
 // Импорт роутов
 import authRoutes from './routes/auth';
-import userRoutes from './routes/users';
-import conversationRoutes from './routes/conversations';
+import conversationsRoutes, { setSocketIO } from './routes/conversations';
+import usersRoutes from './routes/users';
 
-/**
- * Создание и настройка Express приложения
- */
-export function createApp(): express.Application {
+export interface AppComponents {
+  app: Express;
+  httpServer: http.Server;
+  io: SocketIOServer;
+}
+
+export async function initializeApp(): Promise<AppComponents> {
+  logger.info(' Starting application initialization...');
+
   const app = express();
+  const httpServer = http.createServer(app);
 
-  // Безопасность
-  app.use(helmet());
-  
-  // CORS
+  // CORS middleware
   app.use(cors({
-    origin: config.SOCKET_CORS_ORIGIN.split(','),
+    origin: true,
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
   }));
 
-  // Rate limiting
-  const limiter = rateLimit({
-    windowMs: config.RATE_LIMIT_WINDOW_MS,
-    max: config.RATE_LIMIT_MAX_REQUESTS,
-    message: {
-      success: false,
-      error: {
-        code: 429,
-        message: 'Too many requests, please try again later.',
-      },
-    },
-  });
-  app.use('/api/', limiter);
+  // Body parser
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
 
-  // Парсинг тела запроса
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-  app.use(cookieParser());
-
-  // Health check endpoint
-  app.get('/health', (_req, res) => {
-    res.status(200).json({
+  // Health check
+  app.get('/api/health', (req, res) => {
+    res.json({
       success: true,
-      status: 'ok',
-      timestamp: new Date().toISOString(),
+      message: 'Backend is running',
+      timestamp: new Date().toISOString()
     });
   });
 
-  // API Routes
+  // Подключаем роуты
   app.use('/api/auth', authRoutes);
-  app.use('/api/users', userRoutes);
-  app.use('/api/conversations', conversationRoutes);
+  logger.info('✅ Auth routes loaded');
+
+  app.use('/api/conversations', conversationsRoutes);
+  logger.info('✅ Conversations routes loaded');
+
+  app.use('/api/users', usersRoutes);
+  logger.info('✅ Users routes loaded');
 
   // 404 handler
   app.use((req, res) => {
@@ -69,39 +64,61 @@ export function createApp(): express.Application {
       success: false,
       error: {
         code: 404,
-        message: `Route ${req.method} ${req.path} not found`,
-      },
+        message: `Route ${req.method} ${req.path} not found`
+      }
     });
   });
 
-  // Global error handler
+  // Error handler
   app.use(errorHandler);
 
-  return app;
-}
+  // Database connection
+  try {
+    await sequelize.authenticate();
+    logger.info('✅ Database connection established successfully.');
+    await sequelize.sync();
+    logger.info('✅ Database synced');
+  } catch (error) {
+    logger.error('❌ Database connection failed:', error);
+    throw error;
+  }
 
-/**
- * Инициализация приложения
- */
-export async function initializeApp(): Promise<{ app: express.Application; io: any; httpServer: any }> {
-  logger.info('🚀 Starting application initialization...');
+  // Socket.IO setup
+  const io = new SocketIOServer(httpServer, {
+    cors: {
+      origin: '*',
+      methods: ['GET', 'POST']
+    }
+  });
 
-  // Тест подключения к БД
-  await testConnection();
+  // Передаем io в роуты conversations
+  setSocketIO(io);
 
-  // Настройка ассоциаций моделей
-  setupAssociations();
+  // Обработчики WebSocket соединений
+  io.on('connection', (socket) => {
+    logger.info(` New WebSocket connection: ${socket.id}`);
+    
+    // Пользователь подключается — регистрируем его по userId
+    socket.on('register', (userId: number) => {
+      socket.join(`user_${userId}`);
+      logger.info(` User ${userId} registered on socket ${socket.id}`);
+    });
+    
+    // Пользователь входит в комнату чата
+    socket.on('joinChat', (chatId: number) => {
+      socket.join(`chat_${chatId}`);
+      logger.info(`💬 Socket ${socket.id} joined chat ${chatId}`);
+    });
+    
+    socket.on('disconnect', () => {
+      logger.info(`❌ WebSocket disconnected: ${socket.id}`);
+    });
+  });
 
-  // Создание Express приложения
-  const app = createApp();
-
-  // Создание HTTP сервера
-  const httpServer = require('http').createServer(app);
-
-  // Настройка Socket.IO
-  const io = configureSocketIO(httpServer);
-
+  logger.info('✅ Socket.IO configured successfully');
   logger.info('✅ Application initialized successfully');
 
-  return { app, io, httpServer };
+  return { app, httpServer, io };
 }
+
+export default initializeApp;

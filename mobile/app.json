@@ -4,35 +4,27 @@
     "slug": "icq-messenger",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "updates": {
-      "fallbackToCacheTimeout": 0,
-      "enabled": false
-    },
-    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.icq.messenger"
     },
     "android": {
+      "package": "com.icq.messenger",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      },
-      "package": "com.icq.messenger",
-      "permissions": ["INTERNET"]
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
+      }
     },
     "extra": {
-      "apiUrl": "http://185.123.195.44:3000/api"
+      "apiUrl": "http://185.123.195.44:3000/api",
+      "socketUrl": "http://185.123.195.44:3000"
     }
   }
 }

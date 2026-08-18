@@ -1,126 +1,66 @@
-import { Router, Request } from 'express';
+import { Router } from 'express';
 import { asyncHandler } from '../utils/errorHandler';
-import { z } from 'zod';
+import User from '../models/User';
 
 const router = Router();
 
-// Расширяем тип Request для добавления пользователя
-interface AuthRequest extends Request {
-  user?: {
-    id: number;
-    email: string;
-    username: string;
-  };
-}
-
-// Схемы валидации
-const updateProfileSchema = z.object({
-  body: z.object({
-    username: z.string().min(3).max(50).optional(),
-    avatarUrl: z.string().url().optional().nullable(),
-    status: z.enum(['online', 'offline', 'away', 'busy']).optional(),
-  }),
-});
-
-/**
- * GET /api/users/profile
- * Получение профиля текущего пользователя
- */
-router.get(
-  '/profile',
-  asyncHandler(async (req: AuthRequest, res) => {
-    // TODO: Реализовать получение профиля
-    // 1. Получить userId из токена (req.user)
-    // 2. Найти пользователя в БД
-    // 3. Вернуть данные профиля
+// GET /api/users - получить список всех пользователей
+router.get('/', asyncHandler(async (req, res) => {
+  try {
+    const users = await User.findAll({
+      attributes: ['id', 'username', 'email', 'status', 'avatarUrl', 'createdAt', 'updatedAt']
+    });
     
-    res.status(200).json({
-      success: true,
-      message: 'Get profile endpoint - TODO: implement',
+    res.json({ 
+      success: true, 
+      data: users.map(u => ({
+        id: u.id,
+        username: u.username,
+        email: u.email,
+        status: u.status || 'offline',
+        avatarUrl: u.avatarUrl,
+        createdAt: u.createdAt,
+        updatedAt: u.updatedAt
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch users' });
+  }
+  return;
+}));
+
+// GET /api/users/:id - получить пользователя по ID
+router.get('/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    const user = await User.findByPk(id, {
+      attributes: ['id', 'username', 'email', 'status', 'avatarUrl', 'createdAt', 'updatedAt']
+    });
+    
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+    
+    res.json({ 
+      success: true, 
       data: {
-        // Пример данных
-        id: 1,
-        email: 'user@example.com',
-        username: 'username',
-        avatarUrl: null,
-        status: 'offline',
-      },
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        status: user.status || 'offline',
+        avatarUrl: user.avatarUrl,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+      }
     });
-  })
-);
-
-/**
- * PUT /api/users/profile
- * Обновление профиля текущего пользователя
- * 
- * Request Body:
- * - username?: string
- * - avatarUrl?: string | null
- * - status?: 'online' | 'offline' | 'away' | 'busy'
- */
-router.put(
-  '/profile',
-  asyncHandler(async (req: AuthRequest, res) => {
-    // TODO: Реализовать обновление профиля
-    // 1. Валидировать данные
-    // 2. Обновить пользователя в БД
-    // 3. Вернуть обновленные данные
-    
-    res.status(200).json({
-      success: true,
-      message: 'Update profile endpoint - TODO: implement',
-      data: {},
-    });
-  })
-);
-
-/**
- * GET /api/users/:id
- * Получение профиля другого пользователя по ID
- */
-router.get(
-  '/:id',
-  asyncHandler(async (req: AuthRequest, res) => {
-    const { id } = req.params;
-    
-    // TODO: Реализовать получение профиля по ID
-    // 1. Найти пользователя по ID
-    // 2. Проверить права доступа
-    // 3. Вернуть публичные данные пользователя
-    
-    res.status(200).json({
-      success: true,
-      message: `Get user ${id} endpoint - TODO: implement`,
-      data: { id: Number(id) },
-    });
-  })
-);
-
-/**
- * GET /api/users/search
- * Поиск пользователей по query параметру
- * 
- * Query params:
- * - q: string (поисковой запрос)
- * - limit?: number
- * - offset?: number
- */
-router.get(
-  '/search',
-  asyncHandler(async (req: AuthRequest, res) => {
-    const { q, limit = 20, offset = 0 } = req.query;
-    
-    // TODO: Реализовать поиск пользователей
-    // 1. Валидировать query параметры
-    // 2. Поиск по username/email
-    // 3. Вернуть список пользователей
-    
-    res.status(200).json({
-      success: true,
-      message: 'Search users endpoint - TODO: implement',
-      data: { query: q, limit, offset },
-    });
-  })
-);
+  } catch (error) {
+    console.error('Error fetching user:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch user' });
+  }
+  return;
+}));
 
 export default router;
