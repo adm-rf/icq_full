@@ -23,8 +23,8 @@ const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    (req as any).userId = decoded.userId;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production') as any;
+    (req as any).userId = decoded.userId || decoded.id || decoded.sub;
     next();
   } catch (error) {
     res.status(401).json({ success: false, message: 'Невалидный токен' });

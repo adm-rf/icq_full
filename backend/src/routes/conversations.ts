@@ -166,4 +166,57 @@ router.post('/:id/messages', asyncHandler(async (req, res) => {
   return;
 }));
 
+// PATCH /:id/messages/:messageId/delivered - сообщение доставлено
+router.patch('/:id/messages/:messageId/delivered', asyncHandler(async (req, res) => {
+  const messageId = Number(req.params.messageId);
+  const message = await Message.findByPk(messageId);
+
+  if (!message) {
+    res.status(404).json({ success: false, message: 'Message not found' });
+    return;
+  }
+
+  if (message.status === 'sent') {
+    message.status = 'delivered';
+    await message.save();
+  }
+
+  const chat = await Conversation.findByPk(Number(req.params.id));
+  if (io && chat) {
+    (chat.participantIds || []).forEach((uid: number) => {
+      io.to(`user_${uid}`).emit('messageDelivered', { messageId: message.id, chatId: message.conversationId });
+    });
+  }
+
+  res.json({ success: true, data: message.toJSON() });
+  return;
+}));
+
+// PATCH /:id/messages/:messageId/read - сообщение прочитано
+router.patch('/:id/messages/:messageId/read', asyncHandler(async (req, res) => {
+  const messageId = Number(req.params.messageId);
+  const message = await Message.findByPk(messageId);
+
+  if (!message) {
+    res.status(404).json({ success: false, message: 'Message not found' });
+    return;
+  }
+
+  if (message.status !== 'read') {
+    message.status = 'read';
+    message.readAt = new Date();
+    await message.save();
+  }
+
+  const chat = await Conversation.findByPk(Number(req.params.id));
+  if (io && chat) {
+    (chat.participantIds || []).forEach((uid: number) => {
+      io.to(`user_${uid}`).emit('messageRead', { messageId: message.id, chatId: message.conversationId });
+    });
+  }
+
+  res.json({ success: true, data: message.toJSON() });
+  return;
+}));
+
 export default router;

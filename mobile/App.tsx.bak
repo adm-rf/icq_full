@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, FlatList, Modal, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, FlatList, Modal } from 'react-native';
 import { io, Socket } from 'socket.io-client';
 
 const API_URL = 'http://185.123.195.44:3000';
@@ -30,11 +30,6 @@ export default function App() {
   
   // Polling interval для fallback
   const pollingIntervalRef = useRef<any>(null);
-
-  const [showProfile, setShowProfile] = useState(false);
-  const [profileName, setProfileName] = useState('');
-  const [profileStatus, setProfileStatus] = useState('');
-  const [profileAvatar, setProfileAvatar] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem('authToken');
@@ -114,13 +109,6 @@ export default function App() {
       
       newSocket.on('newMessage', (data) => {
         console.log('📨 ПОЛУЧЕНО НОВОЕ СООБЩЕНИЕ:', data);
-
-        if (data.message && data.message.senderId !== (user?.id || 1)) {
-          fetch(`${API_URL}/api/conversations/${data.chatId}/messages/${data.message.id}/delivered`, { method: 'PATCH', headers: getAuthHeaders() }).catch(() => {});
-          if (activeChat && data.chatId === activeChat.id) {
-            fetch(`${API_URL}/api/conversations/${data.chatId}/messages/${data.message.id}/read`, { method: 'PATCH', headers: getAuthHeaders() }).catch(() => {});
-          }
-        }
         lastMessageTime = Date.now();
         
         if (activeChat && data.chatId === activeChat.id) {
@@ -163,14 +151,6 @@ export default function App() {
         loadUsers();
       });
       
-      newSocket.on('messageDelivered', (data) => {
-        setMessages(prev => prev.map(m => m.id === data.messageId && m.status === 'sent' ? { ...m, status: 'delivered' } : m));
-      });
-
-      newSocket.on('messageRead', (data) => {
-        setMessages(prev => prev.map(m => m.id === data.messageId ? { ...m, status: 'read' } : m));
-      });
-
       newSocket.on('disconnect', (reason) => {
         console.log('❌ WebSocket отключен:', reason);
         if (heartbeatInterval) clearInterval(heartbeatInterval);
@@ -290,11 +270,6 @@ export default function App() {
       const data = await response.json();
       if (data.success) {
         setMessages(data.data || []);
-        (data.data || []).forEach((m) => {
-          if (m.senderId !== (user?.id || 1) && m.status !== 'read') {
-            fetch(`${API_URL}/api/conversations/${chat.id}/messages/${m.id}/read`, { method: 'PATCH', headers: getAuthHeaders() }).catch(() => {});
-          }
-        });
       }
     } catch (error) {
       console.error('Failed to load messages:', error);
@@ -381,126 +356,6 @@ export default function App() {
     setConversations([]);
     setActiveChat(null);
     setStatus('Вы вышли из системы');
-  };
-
-  useEffect(() => {
-    if (!showProfile) return;
-    const timer = setTimeout(() => {
-      const slot = document.getElementById('avatar-picker-slot');
-      if (!slot || slot.childElementCount > 0) return;
-      const inp = document.createElement('input');
-      inp.type = 'file';
-      inp.accept = 'image/*';
-      inp.style.width = '100%';
-      const status = document.createElement('div');
-      status.style.fontSize = '12px';
-      status.style.marginTop = '4px';
-      status.style.color = '#333';
-      const doUpload = async (file) => {
-        status.textContent = '⏫ Загрузка: ' + file.name + '...';
-        const fd = new FormData();
-        fd.append('avatar', file);
-        try {
-          const r = await fetch(API_URL + '/api/profile/avatar', {
-            method: 'POST',
-            headers: { Authorization: 'Bearer ' + localStorage.getItem('authToken') },
-            body: fd
-          });
-          const d = await r.json();
-          if (d.success) {
-            status.textContent = '✅ Аватар загружен!';
-            setProfileAvatar(d.data.avatarUrl);
-            const newData = { ...user, avatarUrl: d.data.avatarUrl };
-            setUser(newData);
-            localStorage.setItem('userData', JSON.stringify(newData));
-          } else {
-            status.textContent = '❌ Ошибка сервера: ' + (d.message || r.status);
-          }
-        } catch (e) {
-          status.textContent = '❌ Ошибка сети: ' + e.message;
-        }
-      };
-      inp.addEventListener('change', (ev) => {
-        const f = ev.target.files && ev.target.files[0];
-        if (f) doUpload(f);
-      });
-      slot.appendChild(inp);
-      slot.appendChild(status);
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [showProfile]);
-
-  const openProfile = async () => {
-    setShowProfile(true);
-    setProfileName(user?.username || '');
-    setProfileStatus(user?.status || '');
-    setProfileAvatar(user?.avatarUrl || null);
-    try {
-      const r = await fetch(API_URL + '/api/profile', { headers: getAuthHeaders() });
-      const d = await r.json();
-      if (d.success) {
-        setProfileName(d.data.username || '');
-        setProfileStatus(d.data.status || '');
-        setProfileAvatar(d.data.avatarUrl || null);
-      }
-    } catch (e) { console.error(e); }
-  };
-
-  const saveProfile = async () => {
-    try {
-      const r = await fetch(API_URL + '/api/profile', {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ username: profileName, status: profileStatus })
-      });
-      const d = await r.json();
-      if (d.success) {
-        const newData = { ...user, username: d.data.username, status: d.data.status, avatarUrl: d.data.avatarUrl };
-        setUser(newData);
-        localStorage.setItem('userData', JSON.stringify(newData));
-        Alert.alert('✅ Успех', 'Профиль сохранён');
-        setShowProfile(false);
-      } else {
-        Alert.alert('❌ Ошибка', d.message || 'Не удалось сохранить');
-      }
-    } catch (e) { Alert.alert('❌ Ошибка', e.message); }
-  };
-
-  const pickAvatar = () => {
-    console.log('📷 pickAvatar вызван');
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    document.body.appendChild(input);
-    input.onchange = async (ev) => {
-      const file = ev.target.files[0];
-      console.log('📷 Выбран файл:', file && file.name, file && file.size);
-      if (!file) return;
-      const fd = new FormData();
-      fd.append('avatar', file);
-      try {
-        const r = await fetch(API_URL + '/api/profile/avatar', {
-          method: 'POST',
-          headers: { Authorization: 'Bearer ' + localStorage.getItem('authToken') },
-          body: fd
-        });
-        console.log('📷 Статус ответа сервера:', r.status);
-        const d = await r.json();
-        if (d.success) {
-          console.log('📷 Аватар сохранён:', d.data.avatarUrl);
-          setProfileAvatar(d.data.avatarUrl);
-          const newData = { ...user, avatarUrl: d.data.avatarUrl };
-          setUser(newData);
-          localStorage.setItem('userData', JSON.stringify(newData));
-        } else {
-          console.error('❌ Сервер ответил ошибкой:', d);
-        }
-      } catch (e) {
-        console.error('❌ Ошибка загрузки аватара:', e);
-      }
-      input.remove();
-    };
-    input.click();
   };
 
   const toggleUserSelection = (userId: number) => {
@@ -629,43 +484,6 @@ export default function App() {
     return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
   };
 
-  const renderTicks = (msg) => {
-    if (msg.senderId !== (user?.id || 1)) return null;
-    if (msg.status === 'read') return <Text style={styles.ticksRead}>✓✓</Text>;
-    if (msg.status === 'delivered') return <Text style={styles.ticks}>✓✓</Text>;
-    return <Text style={styles.ticks}>✓</Text>;
-  };
-
-  const getChatAvatar = (chat) => {
-    if (chat.type === 'direct') {
-      const otherId = (chat.participantIds || []).find(id => id !== (user?.id || 1));
-      const other = users.find(u => u.id === otherId);
-      return other?.avatarUrl || null;
-    }
-    return null;
-  };
-
-  const getChatInitial = (chat) => {
-    if (chat.type === 'direct') {
-      const otherId = (chat.participantIds || []).find(id => id !== (user?.id || 1));
-      const other = users.find(u => u.id === otherId);
-      return (other?.username || '?')[0].toUpperCase();
-    }
-    return (chat.name || 'G')[0].toUpperCase();
-  };
-
-  const renderMsgAvatar = (senderId) => {
-    const u = users.find(x => x.id === senderId);
-    if (u && u.avatarUrl) {
-      return <Image source={{ uri: API_URL + '/' + u.avatarUrl }} style={styles.msgAvatar} />;
-    }
-    return (
-      <View style={[styles.msgAvatar, { backgroundColor: getUserColor(senderId) }]}>
-        <Text style={styles.msgAvatarLetter}>{((u && u.username) || 'U')[0].toUpperCase()}</Text>
-      </View>
-    );
-  };
-
   const getUserColor = (userId) => {
     const colors = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
     return colors[userId % colors.length];
@@ -707,16 +525,12 @@ export default function App() {
                   ]}
                 >
                   {!isMyMessage && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                      {renderMsgAvatar(msg.senderId)}
-                      <Text style={[styles.senderName, { color: getUserColor(msg.senderId) }]}>
-                        {msg.senderName}
-                      </Text>
-                    </View>
+                    <Text style={[styles.senderName, { color: getUserColor(msg.senderId) }]}>
+                      {msg.senderName}
+                    </Text>
                   )}
                   <Text style={styles.messageText}>{msg.content}</Text>
                   <Text style={styles.messageTime}>{formatTime(msg.createdAt)}</Text>
-                  {renderTicks(msg)}
                 </View>
               );
             })
@@ -755,42 +569,10 @@ export default function App() {
               {wsStatus === 'Online' ? ' Online' : '🔴 ' + wsStatus}
             </Text>
           </View>
-          <TouchableOpacity onPress={openProfile} style={styles.logoutButton}>
-            <Text style={styles.logoutText}>👤 Профиль</Text>
-          </TouchableOpacity>
           <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
             <Text style={styles.logoutText}>Выйти</Text>
           </TouchableOpacity>
         </View>
-
-        <Modal transparent={true} visible={showProfile} animationType="fade">
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>👤 Профиль</Text>
-              <View style={styles.avatarPreview}>
-                {profileAvatar ? (
-                  <Image source={{ uri: API_URL + '/' + profileAvatar }} style={styles.avatarImage} />
-                ) : (
-                  <View style={[styles.avatarCircle, { backgroundColor: getUserColor(user?.id || 1) }]}>
-                    <Text style={styles.avatarLetter}>{(user?.username || 'U')[0].toUpperCase()}</Text>
-                  </View>
-                )}
-              </View>
-              <View nativeID="avatar-picker-slot" style={{ height: 44, marginBottom: 10 }} />
-              <TextInput style={styles.profileInput} value={profileName} onChangeText={setProfileName} placeholder="Имя пользователя" />
-              <TextInput style={styles.profileInput} value={profileStatus} onChangeText={setProfileStatus} placeholder="Статус" />
-              <Text style={styles.profileEmail}>{user?.email}</Text>
-              <View style={styles.profileActions}>
-                <TouchableOpacity onPress={saveProfile} style={styles.profileButton}>
-                  <Text style={styles.profileButtonText}>💾 Сохранить</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setShowProfile(false)} style={styles.cancelButton}>
-                  <Text style={styles.cancelButtonText}>Отмена</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
 
         {conversations.length === 0 ? (
           <View style={styles.center}>
@@ -807,17 +589,7 @@ export default function App() {
                   style={styles.chatItem}
                   onPress={() => openChat(item)}
                 >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                    {getChatAvatar(item) ? (
-                      <Image source={{ uri: API_URL + '/' + getChatAvatar(item) }} style={styles.chatAvatarImage} />
-                    ) : (
-                      <View style={[styles.chatAvatarCircle, { backgroundColor: getUserColor(item.id) }]}>
-                        <Text style={styles.chatAvatarLetter}>
-                          {item.type === 'group' ? '👥' : getChatInitial(item)}
-                        </Text>
-                      </View>
-                    )}
-                    <View style={[styles.chatItemContent, { flex: 1 }]}>
+                  <View style={styles.chatItemContent}>
                     <View style={styles.chatItemHeader}>
                       <Text style={styles.chatName}>{item.name || 'Без названия'}</Text>
                       <Text style={styles.chatType}>
@@ -827,7 +599,6 @@ export default function App() {
                     <Text style={styles.chatLastMessage} numberOfLines={1}>
                       {item.lastMessage ? `${item.lastMessage.senderName}: ${item.lastMessage.content}` : 'Нет сообщений'}
                     </Text>
-                  </View>
                   </View>
                   <View style={styles.chatItemRight}>
                     <Text style={styles.chatTime}>
@@ -958,28 +729,6 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  msgAvatar: { width: 24, height: 24, borderRadius: 12, marginRight: 6 },
-  msgAvatarLetter: { color: '#fff', fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
-  chatAvatarImage: { width: 50, height: 50, borderRadius: 25, marginRight: 12 },
-  chatAvatarCircle: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  chatAvatarLetter: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  ticks: { color: '#999', fontSize: 12, marginLeft: 4 },
-  ticksRead: { color: '#4fc3f7', fontSize: 12, marginLeft: 4 },
-  modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
-  modalContent: { backgroundColor: '#fff', borderRadius: 16, padding: 20, width: '90%', maxWidth: 400 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
-  avatarPreview: { alignItems: 'center', marginBottom: 15 },
-  avatarImage: { width: 80, height: 80, borderRadius: 40 },
-  avatarCircle: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center' },
-  avatarLetter: { color: '#fff', fontSize: 32, fontWeight: 'bold' },
-  profileButton: { backgroundColor: '#2563eb', borderRadius: 8, padding: 10, alignItems: 'center', marginBottom: 10 },
-  profileButtonText: { color: '#fff', fontWeight: 'bold' },
-  profileInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 10 },
-  profileEmail: { color: '#888', textAlign: 'center', marginBottom: 10 },
-  profileActions: { flexDirection: 'row', gap: 10 },
-  cancelButton: { flex: 1, backgroundColor: '#eee', borderRadius: 8, padding: 10, alignItems: 'center' },
-  cancelButtonText: { color: '#333', fontWeight: 'bold' },
-
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   content: { maxWidth: 500, margin: 'auto', padding: 20, paddingTop: 60, backgroundColor: '#fff', minHeight: '100%' },
   title: { fontSize: 32, fontWeight: 'bold', textAlign: 'center', marginBottom: 10, color: '#000' },

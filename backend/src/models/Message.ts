@@ -9,6 +9,7 @@ class Message extends Model {
   declare content: string;
   declare type: string;
   declare status: string;
+  declare readAt: Date | null;
   declare readonly createdAt: Date;
 }
 
@@ -21,6 +22,7 @@ Message.init(
     content: { type: DataTypes.TEXT, allowNull: false, defaultValue: '' },
     type: { type: DataTypes.STRING, allowNull: false, defaultValue: 'text' },
     status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'sent' },
+    readAt: { type: DataTypes.DATE, allowNull: true, defaultValue: null },
   },
   { sequelize, modelName: 'Message', tableName: 'Messages', updatedAt: false }
 );
