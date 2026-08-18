@@ -6,9 +6,10 @@ import sequelize from './config/database';
 import logger from './utils/logger';
 import { errorHandler } from './utils/errorHandler';
 
-// Импорт моделей
+// Импортируем ВСЕ модели (это нужно для sequelize.sync)
 import User from './models/User';
 import Conversation from './models/Conversation';
+import Message from './models/Message';
 
 // Импорт роутов
 import authRoutes from './routes/auth';
@@ -22,7 +23,7 @@ export interface AppComponents {
 }
 
 export async function initializeApp(): Promise<AppComponents> {
-  logger.info(' Starting application initialization...');
+  logger.info('🚀 Starting application initialization...');
 
   const app = express();
   const httpServer = http.createServer(app);
@@ -76,7 +77,9 @@ export async function initializeApp(): Promise<AppComponents> {
   try {
     await sequelize.authenticate();
     logger.info('✅ Database connection established successfully.');
-    await sequelize.sync();
+
+    // Синхронизация моделей (создает таблицы Conversations и Messages)
+    await sequelize.sync({ alter: true });
     logger.info('✅ Database synced');
   } catch (error) {
     logger.error('❌ Database connection failed:', error);
@@ -96,15 +99,13 @@ export async function initializeApp(): Promise<AppComponents> {
 
   // Обработчики WebSocket соединений
   io.on('connection', (socket) => {
-    logger.info(` New WebSocket connection: ${socket.id}`);
+    logger.info(`🔌 New WebSocket connection: ${socket.id}`);
     
-    // Пользователь подключается — регистрируем его по userId
     socket.on('register', (userId: number) => {
       socket.join(`user_${userId}`);
-      logger.info(` User ${userId} registered on socket ${socket.id}`);
+      logger.info(`👤 User ${userId} registered on socket ${socket.id}`);
     });
     
-    // Пользователь входит в комнату чата
     socket.on('joinChat', (chatId: number) => {
       socket.join(`chat_${chatId}`);
       logger.info(`💬 Socket ${socket.id} joined chat ${chatId}`);
