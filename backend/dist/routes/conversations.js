@@ -126,6 +126,8 @@ router.post('/:id/messages', (0, errorHandler_1.asyncHandler)(async (req, res) =
         type: type || 'text',
         senderId: senderId || userId || 1,
         senderName: senderName || 'User',
+        duration: req.body.duration || null,
+        fileUrl: req.body.fileUrl || null,
         status: 'sent',
     });
     console.log('📤 Сообщение сохранено в БД, id:', message.id);

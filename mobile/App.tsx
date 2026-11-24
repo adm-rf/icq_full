@@ -41,6 +41,11 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showMsgSearch, setShowMsgSearch] = useState(false);
   const [msgSearchQuery, setMsgSearchQuery] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
+  const recordingInterval = useRef<any>(null);
   const [notifEnabled, setNotifEnabled] = useState(localStorage.getItem('notificationsEnabled') !== '0');
   const [toast, setToast] = useState(null);
   const [profileName, setProfileName] = useState('');
@@ -478,6 +483,92 @@ export default function App() {
     }
   };
 
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+        stream.getTracks().forEach(track => track.stop());
+        
+        // Отправляем на сервер
+        const formData = new FormData();
+        formData.append('voice', audioBlob, 'voice.webm');
+        formData.append('duration', String(recordingDuration));
+
+        try {
+          const response = await fetch(`${API_URL}/api/voice`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+          });
+
+          const result = await response.json();
+          if (result.success) {
+            // Отправляем сообщение в чат
+            await handleSendMessage(result.data.fileUrl, 'voice', result.data.duration);
+          }
+        } catch (error) {
+          console.error('Ошибка отправки голоса:', error);
+        }
+
+        setAudioChunks([]);
+        setRecordingDuration(0);
+      };
+
+      recorder.start();
+      setMediaRecorder(recorder);
+      setAudioChunks(chunks);
+      setIsRecording(true);
+
+      // Таймер
+      let seconds = 0;
+      recordingInterval.current = setInterval(() => {
+        seconds += 1;
+        setRecordingDuration(seconds);
+      }, 1000);
+    } catch (error) {
+      console.error('Ошибка доступа к микрофону:', error);
+      alert('Не удалось получить доступ к микрофону');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
+      setIsRecording(false);
+      if (recordingInterval.current) {
+        clearInterval(recordingInterval.current);
+        recordingInterval.current = null;
+      }
+    }
+  };
+
+  const cancelRecording = () => {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
+      setIsRecording(false);
+      if (recordingInterval.current) {
+        clearInterval(recordingInterval.current);
+        recordingInterval.current = null;
+      }
+      setAudioChunks([]);
+      setRecordingDuration(0);
+    }
+  };
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const openProfile = async () => {
     setShowProfile(true);
     setProfileName(user?.username || '');
@@ -634,7 +725,7 @@ export default function App() {
     }
   };
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = async (fileUrl?: string, type: string = 'text', duration?: number) => {
     if (!newMessage.trim() || !activeChat) return;
     
     const messageText = newMessage;
@@ -815,7 +906,25 @@ export default function App() {
                       </Text>
                     </View>
                   )}
-                  <Text style={styles.messageText}>{msg.content}</Text>
+                  {msg.type === 'voice' ? (
+                    <View style={styles.voiceMessageContainer}>
+                      <Text style={styles.voiceIcon}>🎤</Text>
+                      <Text style={styles.voiceDuration}>{formatDuration(msg.duration || 0)}</Text>
+                      <TouchableOpacity style={styles.voicePlayButton} onPress={() => {
+                        const audio = new Audio(`\${API_URL}/\${msg.content}`);
+                        audio.play();
+                      }}>
+                        <Text style={styles.voicePlayIcon}>▶️</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <Text style={[
+                      styles.messageText,
+                      msg.senderId === userId && styles.messageTextOwn,
+                    ]}>
+                      {msg.content}
+                    </Text>
+                  )}
                   <Text style={styles.messageTime}>{formatTime(msg.createdAt)}</Text>
                   {renderTicks(msg)}
                 </View>
@@ -834,12 +943,31 @@ export default function App() {
             multiline
             onSubmitEditing={handleSendMessage}
           />
-          <TouchableOpacity 
+          {isRecording ? (
+            <View style={styles.recordingContainer}>
+              <TouchableOpacity onPress={cancelRecording} style={styles.recordingCancelBtn}>
+                <Text style={styles.recordingCancelText}>✕</Text>
+              </TouchableOpacity>
+              <View style={styles.recordingWave}>
+                <Text style={styles.recordingText}>🎤 {formatDuration(recordingDuration)}</Text>
+              </View>
+              <TouchableOpacity onPress={stopRecording} style={styles.recordingStopBtn}>
+                <Text style={styles.recordingStopText}>⏹</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <TouchableOpacity onPress={startRecording} style={styles.voiceButton}>
+                <Text style={styles.voiceButtonText}>🎤</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
             style={[styles.sendButton, !newMessage.trim() ? styles.sendButtonDisabled : styles.sendButtonActive]}
             onPress={handleSendMessage}
           >
             <Text style={styles.sendButtonText}>➤</Text>
           </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
     );
@@ -1095,6 +1223,92 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  voiceButton: {
+    backgroundColor: '#4fc3f7',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  voiceButtonText: {
+    fontSize: 20,
+  },
+  recordingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    backgroundColor: '#ff5252',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  cancelButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  cancelButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  recordingWave: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  recordingText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  stopButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  stopButtonText: {
+    color: '#fff',
+    fontSize: 18,
+  },
+  voiceMessageContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(79, 195, 247, 0.2)',
+    borderRadius: 12,
+    padding: 8,
+    minWidth: 150,
+  },
+  voiceIcon: {
+    fontSize: 24,
+    marginRight: 8,
+  },
+  voiceDuration: {
+    fontSize: 14,
+    color: '#4fc3f7',
+    fontWeight: 'bold',
+    marginRight: 8,
+  },
+  voicePlayButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#4fc3f7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  voicePlayIcon: {
+    fontSize: 16,
+  },
   toast: { position: 'absolute', top: 10, left: 10, right: 10, backgroundColor: '#333', borderRadius: 12, padding: 12, zIndex: 300, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8 },
   toastTitle: { color: '#4fc3f7', fontWeight: 'bold', marginBottom: 4 },
   toastBody: { color: '#fff' },

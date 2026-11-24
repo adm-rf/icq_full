@@ -148,6 +148,8 @@ router.post('/:id/messages', asyncHandler(async (req, res) => {
     type: type || 'text',
     senderId: senderId || userId || 1,
     senderName: senderName || 'User',
+    duration: req.body.duration || null,
+    fileUrl: req.body.fileUrl || null,
     status: 'sent',
   } as any);
 

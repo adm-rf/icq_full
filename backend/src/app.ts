@@ -64,6 +64,7 @@ app.use('/api', apiLimiter);
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 // Статические файлы (аватары)
+app.use('/uploads/voice', express.static(path.join(__dirname, '../../uploads/voice')));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
   // Health check

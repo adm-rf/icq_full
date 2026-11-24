@@ -85,6 +85,7 @@ async function initializeApp() {
     app.use(express_1.default.json());
     app.use(express_1.default.urlencoded({ extended: true }));
     // Статические файлы (аватары)
+    app.use('/uploads/voice', express_1.default.static(path_1.default.join(__dirname, '../../uploads/voice')));
     app.use('/uploads', express_1.default.static(path_1.default.join(__dirname, '../uploads')));
     // Health check
     app.get('/api/health', (req, res) => {
