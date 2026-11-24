@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { loginLimiter, registerLimiter } from '../middleware/rateLimiter';
+import { validate, schemas } from '../middleware/validator';
 import { asyncHandler } from '../utils/errorHandler';
 import { validateBody } from '../utils/validators';
 import { z } from 'zod';
@@ -28,6 +30,7 @@ const loginSchema = z.object({
  */
 router.post(
   '/register',
+  registerLimiter,
   validateBody(registerSchema),
   asyncHandler(async (req, res) => {
     const { email, username, password } = req.body;
@@ -80,6 +83,7 @@ router.post(
  */
 router.post(
   '/login',
+  loginLimiter,
   validateBody(loginSchema),
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;

@@ -1,3 +1,5 @@
+import helmet from 'helmet';
+import { apiLimiter } from './middleware/rateLimiter';
 import express, { Express } from 'express';
 import cors from 'cors';
 import http from 'http';
@@ -28,6 +30,26 @@ export async function initializeApp(): Promise<AppComponents> {
   logger.info('🚀 Starting application initialization...');
 
   const app = express();
+
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'blob:', 'http://185.123.195.44:*'],
+      connectSrc: ["'self'", 'ws://185.123.195.44:*', 'wss://185.123.195.44:*'],
+      fontSrc: ["'self'", 'data:'],
+      mediaSrc: ["'self'", 'blob:'],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+
+// Global API rate limiting
+app.use('/api', apiLimiter);
   const httpServer = http.createServer(app);
 
   // CORS middleware

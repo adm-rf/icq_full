@@ -30,8 +30,19 @@ export default function App() {
   
   // Polling interval для fallback
   const pollingIntervalRef = useRef<any>(null);
+  const conversationsRef = useRef(conversations);
+  const activeChatRef = useRef(activeChat);
+  const toastTimer = useRef<any>(null);
+
+  useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
+  useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
 
   const [showProfile, setShowProfile] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showMsgSearch, setShowMsgSearch] = useState(false);
+  const [msgSearchQuery, setMsgSearchQuery] = useState('');
+  const [notifEnabled, setNotifEnabled] = useState(localStorage.getItem('notificationsEnabled') !== '0');
+  const [toast, setToast] = useState(null);
   const [profileName, setProfileName] = useState('');
   const [profileStatus, setProfileStatus] = useState('');
   const [profileAvatar, setProfileAvatar] = useState(null);
@@ -119,6 +130,10 @@ export default function App() {
           fetch(`${API_URL}/api/conversations/${data.chatId}/messages/${data.message.id}/delivered`, { method: 'PATCH', headers: getAuthHeaders() }).catch(() => {});
           if (activeChat && data.chatId === activeChat.id) {
             fetch(`${API_URL}/api/conversations/${data.chatId}/messages/${data.message.id}/read`, { method: 'PATCH', headers: getAuthHeaders() }).catch(() => {});
+          }
+          const isActive = activeChatRef.current && activeChatRef.current.id === data.chatId;
+          if (!isActive && localStorage.getItem('notificationsEnabled') !== '0') {
+            showNotification(data.message.senderName || 'Новое сообщение', data.message.content, data.chatId);
           }
         }
         lastMessageTime = Date.now();
@@ -430,6 +445,39 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [showProfile]);
 
+  const openChatById = (chatId) => {
+    const target = conversationsRef.current.find(c => c.id === chatId);
+    if (target) openChat(target);
+  };
+
+  const showNotification = (senderName, body, chatId) => {
+    setToast({ title: senderName, body, chatId });
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 5000);
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        const n = new Notification('💬 ' + senderName, { body });
+        n.onclick = () => { window.focus(); openChatById(chatId); n.close(); };
+      } catch (e) { console.error(e); }
+    }
+  };
+
+  const toggleNotifications = async () => {
+    if (notifEnabled) {
+      localStorage.setItem('notificationsEnabled', '0');
+      setNotifEnabled(false);
+      return;
+    }
+    localStorage.setItem('notificationsEnabled', '1');
+    setNotifEnabled(true);
+    if ('Notification' in window && Notification.permission === 'default') {
+      try { await Notification.requestPermission(); } catch (e) {}
+    }
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('🔔 Уведомления включены', { body: 'Вы получите уведомление о новых сообщениях' });
+    }
+  };
+
   const openProfile = async () => {
     setShowProfile(true);
     setProfileName(user?.username || '');
@@ -636,6 +684,40 @@ export default function App() {
     return <Text style={styles.ticks}>✓</Text>;
   };
 
+  const displayMessages = msgSearchQuery.trim()
+    ? messages.filter(m => (m.content || '').toLowerCase().includes(msgSearchQuery.toLowerCase().trim()))
+    : messages;
+
+  const filteredConversations = conversations.filter(c =>
+    (c.name || '').toLowerCase().includes(searchQuery.toLowerCase().trim())
+  );
+
+  const foundUsers = searchQuery.trim()
+    ? users.filter(u => u.id !== (user?.id || 1) && (u.username || '').toLowerCase().includes(searchQuery.toLowerCase().trim()))
+    : [];
+
+  const openOrCreateDirect = async (u) => {
+    const existing = conversations.find(c => c.type === 'direct' && (c.participantIds || []).includes(u.id));
+    if (existing) {
+      openChat(existing);
+      return;
+    }
+    try {
+      const r = await fetch(API_URL + '/api/conversations', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ type: 'direct', participantIds: [u.id] })
+      });
+      const d = await r.json();
+      if (d.success) {
+        await loadConversations();
+        openChat(d.data);
+      } else {
+        Alert.alert('❌ Ошибка', d.message || 'Не удалось создать чат');
+      }
+    } catch (e) { Alert.alert('❌ Ошибка', e.message); }
+  };
+
   const getChatAvatar = (chat) => {
     if (chat.type === 'direct') {
       const otherId = (chat.participantIds || []).find(id => id !== (user?.id || 1));
@@ -687,7 +769,26 @@ export default function App() {
               </Text>
             </Text>
           </View>
+          <TouchableOpacity onPress={() => { setShowMsgSearch(!showMsgSearch); setMsgSearchQuery(''); }} style={styles.backButton}>
+            <Text style={styles.backButtonText}>🔍</Text>
+          </TouchableOpacity>
         </View>
+
+        {showMsgSearch && (
+          <View style={styles.searchBox}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Поиск по сообщениям..."
+              value={msgSearchQuery}
+              onChangeText={setMsgSearchQuery}
+            />
+            {msgSearchQuery.trim() !== '' && (
+              <Text style={styles.searchSectionTitle}>
+                Найдено: {displayMessages.length}
+              </Text>
+            )}
+          </View>
+        )}
 
         <ScrollView style={styles.messagesContainer}>
           {messages.length === 0 ? (
@@ -696,7 +797,7 @@ export default function App() {
               <Text style={styles.noMessagesSubtext}>Напишите первое сообщение!</Text>
             </View>
           ) : (
-            messages.map((msg) => {
+            displayMessages.map((msg) => {
               const isMyMessage = msg.senderId === (user?.id || 1);
               return (
                 <View 
@@ -747,6 +848,12 @@ export default function App() {
   if (isLoggedIn && user) {
     return (
       <View style={styles.container}>
+        {toast && (
+          <TouchableOpacity style={styles.toast} onPress={() => { openChatById(toast.chatId); setToast(null); }}>
+            <Text style={styles.toastTitle}>💬 {toast.title}</Text>
+            <Text style={styles.toastBody} numberOfLines={2}>{toast.body}</Text>
+          </TouchableOpacity>
+        )}
         <View style={styles.header}>
           <Text style={styles.headerTitle}> Чаты</Text>
           <Text style={styles.userName}>Привет, {user.username}!</Text>
@@ -755,6 +862,9 @@ export default function App() {
               {wsStatus === 'Online' ? ' Online' : '🔴 ' + wsStatus}
             </Text>
           </View>
+          <TouchableOpacity onPress={toggleNotifications} style={styles.logoutButton}>
+            <Text style={styles.logoutText}>{notifEnabled ? '🔔' : '🔕'}</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={openProfile} style={styles.logoutButton}>
             <Text style={styles.logoutText}>👤 Профиль</Text>
           </TouchableOpacity>
@@ -792,14 +902,41 @@ export default function App() {
           </View>
         </Modal>
 
-        {conversations.length === 0 ? (
+        <View style={styles.searchBox}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="🔍 Поиск чатов и людей..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
+
+        {searchQuery.trim() !== '' && foundUsers.length > 0 && (
+          <View style={styles.searchResults}>
+            <Text style={styles.searchSectionTitle}>Люди</Text>
+            {foundUsers.map(u => (
+              <TouchableOpacity key={u.id} style={styles.searchUserRow} onPress={() => openOrCreateDirect(u)}>
+                {u.avatarUrl ? (
+                  <Image source={{ uri: API_URL + '/' + u.avatarUrl }} style={styles.chatAvatarImage} />
+                ) : (
+                  <View style={[styles.chatAvatarCircle, { backgroundColor: getUserColor(u.id) }]}>
+                    <Text style={styles.chatAvatarLetter}>{(u.username || 'U')[0].toUpperCase()}</Text>
+                  </View>
+                )}
+                <Text style={styles.searchUserName}>{u.username}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {filteredConversations.length === 0 ? (
           <View style={styles.center}>
-            <Text style={styles.emptyText}>Пока нет чатов</Text>
-            <Text style={styles.emptySubtext}>Создайте свой первый чат!</Text>
+            <Text style={styles.emptyText}>{searchQuery.trim() ? 'Ничего не найдено' : 'Пока нет чатов'}</Text>
+            <Text style={styles.emptySubtext}>{searchQuery.trim() ? 'Попробуйте другой запрос' : 'Создайте свой первый чат!'}</Text>
           </View>
         ) : (
           <FlatList
-            data={conversations}
+            data={filteredConversations}
             keyExtractor={(item) => item.id.toString()}
             renderItem={({ item }) => (
               <View style={styles.chatItemWrapper}>
@@ -958,6 +1095,15 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  toast: { position: 'absolute', top: 10, left: 10, right: 10, backgroundColor: '#333', borderRadius: 12, padding: 12, zIndex: 300, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8 },
+  toastTitle: { color: '#4fc3f7', fontWeight: 'bold', marginBottom: 4 },
+  toastBody: { color: '#fff' },
+  searchBox: { paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fff' },
+  searchInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#f5f5f5' },
+  searchResults: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee', paddingVertical: 8 },
+  searchSectionTitle: { paddingHorizontal: 16, fontSize: 13, color: '#888', marginBottom: 4 },
+  searchUserRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 6 },
+  searchUserName: { fontSize: 16, fontWeight: 'bold' },
   msgAvatar: { width: 24, height: 24, borderRadius: 12, marginRight: 6 },
   msgAvatarLetter: { color: '#fff', fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
   chatAvatarImage: { width: 50, height: 50, borderRadius: 25, marginRight: 12 },

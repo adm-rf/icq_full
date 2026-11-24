@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
+const rateLimiter_1 = require("../middleware/rateLimiter");
 const errorHandler_1 = require("../utils/errorHandler");
 const validators_1 = require("../utils/validators");
 const zod_1 = require("zod");
@@ -26,7 +27,7 @@ const loginSchema = zod_1.z.object({
 /**
  * POST /api/auth/register — СОЗДАЁТ нового пользователя
  */
-router.post('/register', (0, validators_1.validateBody)(registerSchema), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+router.post('/register', rateLimiter_1.registerLimiter, (0, validators_1.validateBody)(registerSchema), (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { email, username, password } = req.body;
     // 1. Проверка: не существует ли уже пользователь с таким email
     const existingUser = await User_1.default.findOne({ where: { email } });
@@ -58,7 +59,7 @@ router.post('/register', (0, validators_1.validateBody)(registerSchema), (0, err
 /**
  * POST /api/auth/login — ПРОВЕРЯЕТ существующего пользователя
  */
-router.post('/login', (0, validators_1.validateBody)(loginSchema), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+router.post('/login', rateLimiter_1.loginLimiter, (0, validators_1.validateBody)(loginSchema), (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { email, password } = req.body;
     // 1. Поиск пользователя по email
     const user = await User_1.default.findOne({ where: { email } });

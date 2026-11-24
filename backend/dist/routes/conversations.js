@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setSocketIO = void 0;
+const sanitize_1 = require("../utils/sanitize");
 const express_1 = require("express");
 const errorHandler_1 = require("../utils/errorHandler");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
@@ -121,7 +122,7 @@ router.post('/:id/messages', (0, errorHandler_1.asyncHandler)(async (req, res) =
     }
     const message = await Message_1.default.create({
         conversationId: chatId,
-        content: content || '',
+        content: (0, sanitize_1.sanitizeText)(content || ''),
         type: type || 'text',
         senderId: senderId || userId || 1,
         senderName: senderName || 'User',

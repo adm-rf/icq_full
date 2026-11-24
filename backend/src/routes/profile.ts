@@ -3,6 +3,9 @@ import { asyncHandler } from '../utils/errorHandler';
 import jwt from 'jsonwebtoken';
 import User from '../models/User';
 import { upload } from '../middleware/upload';
+import { avatarLimiter } from '../middleware/rateLimiter';
+import { validate, schemas } from '../middleware/validator';
+import { sanitizeText } from '../utils/sanitize';
 import fs from 'fs';
 import path from 'path';
 
@@ -50,7 +53,7 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 // PUT /api/profile - обновить username/status
-router.put('/', asyncHandler(async (req, res) => {
+router.put('/', validate(schemas.profile), asyncHandler(async (req, res) => {
   const userId = (req as any).userId;
   const { username, status } = req.body || {};
 
@@ -69,7 +72,7 @@ router.put('/', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/profile/avatar - загрузить аватар
-router.post('/avatar', upload.single('avatar'), asyncHandler(async (req: any, res: any) => {
+router.post('/avatar', avatarLimiter, upload.single('avatar'), asyncHandler(async (req: any, res: any) => {
   const userId = req.userId;
 
   if (!req.file) {

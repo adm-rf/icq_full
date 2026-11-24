@@ -8,6 +8,8 @@ const errorHandler_1 = require("../utils/errorHandler");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const User_1 = __importDefault(require("../models/User"));
 const upload_1 = require("../middleware/upload");
+const rateLimiter_1 = require("../middleware/rateLimiter");
+const validator_1 = require("../middleware/validator");
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const router = (0, express_1.Router)();
@@ -47,7 +49,7 @@ router.get('/', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     return;
 }));
 // PUT /api/profile - обновить username/status
-router.put('/', (0, errorHandler_1.asyncHandler)(async (req, res) => {
+router.put('/', (0, validator_1.validate)(validator_1.schemas.profile), (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const userId = req.userId;
     const { username, status } = req.body || {};
     const user = await User_1.default.findByPk(userId);
@@ -64,7 +66,7 @@ router.put('/', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     return;
 }));
 // POST /api/profile/avatar - загрузить аватар
-router.post('/avatar', upload_1.upload.single('avatar'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+router.post('/avatar', rateLimiter_1.avatarLimiter, upload_1.upload.single('avatar'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const userId = req.userId;
     if (!req.file) {
         res.status(400).json({ success: false, message: 'Файл не загружен' });

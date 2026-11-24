@@ -1,3 +1,4 @@
+import { sanitizeText } from '../utils/sanitize';
 import { Router, Request, Response, NextFunction } from 'express';
 import { asyncHandler } from '../utils/errorHandler';
 import jwt from 'jsonwebtoken';
@@ -143,7 +144,7 @@ router.post('/:id/messages', asyncHandler(async (req, res) => {
 
   const message = await Message.create({
     conversationId: chatId,
-    content: content || '',
+    content: sanitizeText(content || ''),
     type: type || 'text',
     senderId: senderId || userId || 1,
     senderName: senderName || 'User',

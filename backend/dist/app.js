@@ -37,6 +37,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.initializeApp = initializeApp;
+const helmet_1 = __importDefault(require("helmet"));
+const rateLimiter_1 = require("./middleware/rateLimiter");
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const http_1 = __importDefault(require("http"));
@@ -53,6 +55,24 @@ const path_1 = __importDefault(require("path"));
 async function initializeApp() {
     logger_1.default.info('🚀 Starting application initialization...');
     const app = (0, express_1.default)();
+    // Security headers
+    app.use((0, helmet_1.default)({
+        contentSecurityPolicy: {
+            directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+                styleSrc: ["'self'", "'unsafe-inline'"],
+                imgSrc: ["'self'", 'data:', 'blob:', 'http://185.123.195.44:*'],
+                connectSrc: ["'self'", 'ws://185.123.195.44:*', 'wss://185.123.195.44:*'],
+                fontSrc: ["'self'", 'data:'],
+                mediaSrc: ["'self'", 'blob:'],
+            },
+        },
+        crossOriginEmbedderPolicy: false,
+        crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }));
+    // Global API rate limiting
+    app.use('/api', rateLimiter_1.apiLimiter);
     const httpServer = http_1.default.createServer(app);
     // CORS middleware
     app.use((0, cors_1.default)({
