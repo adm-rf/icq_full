@@ -9,4 +9,5 @@ node_modules/
 .env
 .env.local
 *.env.*
-```
+```backend/logs/
+*.bak
